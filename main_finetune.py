@@ -19,6 +19,7 @@ from pathlib import Path
 
 import torch
 import torch.backends.cudnn as cudnn
+from PASS import RunningMode
 from torch.utils.tensorboard import SummaryWriter
 
 import timm
@@ -151,11 +152,14 @@ def get_args_parser():
     parser.add_argument('--dist_on_itp', action='store_true')
     parser.add_argument('--dist_url', default='env://',
                         help='url used to set up distributed training')
+    parser.add_argument('--mode', type=str, default='Pretrain',
+                                 help='Mask Gate mode')
 
     return parser
 
 
 def main(args):
+
     misc.init_distributed_mode(args)
 
     print('job dir: {}'.format(os.path.dirname(os.path.realpath(__file__))))
@@ -172,6 +176,16 @@ def main(args):
 
     dataset_train = build_dataset(is_train=True, args=args)
     dataset_val = build_dataset(is_train=False, args=args)
+    if args.mode == 'Pretrain':
+        args.running_mode = RunningMode.GatePreTrain
+    if args.mode == 'Finetuning':
+        args.running_mode = RunningMode.FineTuning
+    if args.mode == 'Test':
+        args.running_mode = RunningMode.Test
+    if args.mode == 'Origin':
+        args.running_mode = RunningMode.BackboneTrain
+    if args.mode == 'BackboneTest':
+        args.running_mode = RunningMode.BackboneTest
 
     if True:  # args.distributed:
         num_tasks = misc.get_world_size()

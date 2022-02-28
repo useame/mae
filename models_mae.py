@@ -13,24 +13,83 @@ from functools import partial
 
 import torch
 import torch.nn as nn
+from timm.models.layers.helpers import to_2tuple
 
 from timm.models.vision_transformer import PatchEmbed, Block
 
 from util.pos_embed import get_2d_sincos_pos_embed
+from PASS import RunningMode, MaskMode, MaskGate, m_cfg
 
+class PatchEmbed_(PatchEmbed):
+# class PatchEmbed(nn.Module):
+    """ Image to Patch Embedding
+    """
+    def __init__(self, img_size=224, patch_size=16,  in_chans=3,  embed_dim=768,
+                 running_mode=RunningMode.GatePreTrain):
+        super().__init__()
+        img_size = to_2tuple(img_size)
+        patch_size = to_2tuple(patch_size)
+        num_patches = (img_size[1] // patch_size[1]) * (img_size[0] // patch_size[0])
+        self.img_size = img_size
+        self.patch_size = patch_size
+        self.num_patches = num_patches
 
+        if self.num_patches == -1:
+            self.gate = None
+        else:
+            # patch_size = 4
+            self.gate = MaskGate(patch_size, self.num_patches, in_chans, embed_dim, running_mode)
+        self.running_mode = running_mode
+        self.previous_x = None
+
+        self.proj = nn.Conv2d(in_chans, embed_dim, kernel_size=patch_size, stride=patch_size)
+
+    def forward(self, x):
+        B, C, H, W = x.shape
+        # print(self.gate.convmixer)
+        #
+        # # print(self.gate.convmixer[0])
+        # print(self.gate.convmixer._modules['0'].Conv2d)
+        #
+        # print(self.gate.convmixer._modules['0'].Conv2d.weight.data)
+
+        # FIXME look at relaxing size constraints
+        assert H == self.img_size[0] and W == self.img_size[1], \
+            f"Input image size ({H}*{W}) doesn't match model ({self.img_size[0]}*{self.img_size[1]})."
+        if self.previous_x is None:
+            out = x
+            if m_cfg.mask_mode == MaskMode.Anchor or self.running_mode == RunningMode.Test:
+                self.previous_x = x.clone().detach()
+        else:
+            # out = self.gate(x, self.previous_x)
+            if m_cfg.mask_mode == MaskMode.Anchor:
+                self.previous_x = x.clone().detach()
+            elif self.gate is not None:
+                x = self.gate(x, self.previous_x)
+                if self.running_mode == RunningMode.Test:
+                    self.previous_x = x.clone().detach()
+
+        x = self.proj(x).flatten(2).transpose(1, 2)
+
+        return x
+# struct
 class MaskedAutoencoderViT(nn.Module):
     """ Masked Autoencoder with VisionTransformer backbone
     """
     def __init__(self, img_size=224, patch_size=16, in_chans=3,
                  embed_dim=1024, depth=24, num_heads=16,
                  decoder_embed_dim=512, decoder_depth=8, decoder_num_heads=16,
-                 mlp_ratio=4., norm_layer=nn.LayerNorm, norm_pix_loss=False):
+                 mlp_ratio=4., norm_layer=nn.LayerNorm, norm_pix_loss=False, running_mode=RunningMode.GatePreTrain):
         super().__init__()
 
         # --------------------------------------------------------------------------
         # MAE encoder specifics
-        self.patch_embed = PatchEmbed(img_size, patch_size, in_chans, embed_dim)
+        # self, img_size = 224, patch_size = 16, patch_num = 196, in_chans = 3, embed_dim = 768,
+        # running_mode = RunningMode.GatePreTrain)
+        if running_mode == RunningMode.GatePreTrain:
+            self.patch_embed = PatchEmbed_(img_size, patch_size, in_chans, embed_dim, running_mode)
+        if running_mode == RunningMode.BackboneTrain:
+            self.patch_embed = PatchEmbed(img_size, patch_size, in_chans, embed_dim)
         num_patches = self.patch_embed.num_patches
 
         self.cls_token = nn.Parameter(torch.zeros(1, 1, embed_dim))
@@ -61,6 +120,7 @@ class MaskedAutoencoderViT(nn.Module):
         self.norm_pix_loss = norm_pix_loss
 
         self.initialize_weights()
+
 
     def initialize_weights(self):
         # initialization
@@ -146,7 +206,7 @@ class MaskedAutoencoderViT(nn.Module):
         mask = torch.gather(mask, dim=1, index=ids_restore)
 
         return x_masked, mask, ids_restore
-
+    # here
     def forward_encoder(self, x, mask_ratio):
         # embed patches
         x = self.patch_embed(x)
@@ -220,7 +280,7 @@ class MaskedAutoencoderViT(nn.Module):
         return loss, pred, mask
 
 
-def mae_vit_base_patch16_dec512d8b(**kwargs):
+def mae_vit_base_patch16_dec512d8b(**kwargs,):
     model = MaskedAutoencoderViT(
         patch_size=16, embed_dim=768, depth=12, num_heads=12,
         decoder_embed_dim=512, decoder_depth=8, decoder_num_heads=16,

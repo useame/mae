@@ -18,18 +18,19 @@ from pathlib import Path
 
 import torch
 import torch.backends.cudnn as cudnn
+from PASS import RunningMode
 from torch.utils.tensorboard import SummaryWriter
 import torchvision.transforms as transforms
 import torchvision.datasets as datasets
 
 import timm
 
-assert timm.__version__ == "0.3.2"  # version check
+# assert timm.__version__ == "0.3.2"  # version check
 import timm.optim.optim_factory as optim_factory
 
 import util.misc as misc
 from util.misc import NativeScalerWithGradNormCount as NativeScaler
-
+# from timm.models import to_2tuple
 import models_mae
 
 from engine_pretrain import train_one_epoch
@@ -101,6 +102,8 @@ def get_args_parser():
     parser.add_argument('--dist_url', default='env://',
                         help='url used to set up distributed training')
 
+    parser.add_argument('--mode', type=str, default='Pretrain',
+                                 help='Mask Gate mode')
     return parser
 
 
@@ -111,6 +114,18 @@ def main(args):
     print("{}".format(args).replace(', ', ',\n'))
 
     device = torch.device(args.device)
+
+    if args.mode == 'Pretrain':
+        args.running_mode = RunningMode.GatePreTrain
+    if args.mode == 'Finetuning':
+        args.running_mode = RunningMode.FineTuning
+    if args.mode == 'Test':
+        args.running_mode = RunningMode.Test
+    if args.mode == 'Origin':
+        args.running_mode = RunningMode.BackboneTrain
+    if args.mode == 'BackboneTest':
+        args.running_mode = RunningMode.BackboneTest
+
 
     # fix the seed for reproducibility
     seed = args.seed + misc.get_rank()
@@ -153,7 +168,7 @@ def main(args):
     )
     
     # define the model
-    model = models_mae.__dict__[args.model](norm_pix_loss=args.norm_pix_loss)
+    model = models_mae.__dict__[args.model](norm_pix_loss=args.norm_pix_loss, running_mode=args.running_mode)
 
     model.to(device)
 
@@ -194,7 +209,7 @@ def main(args):
             log_writer=log_writer,
             args=args
         )
-        if args.output_dir and (epoch % 20 == 0 or epoch + 1 == args.epochs):
+        if args.output_dir and (epoch % 1 == 0 or epoch + 1 == args.epochs):
             misc.save_model(
                 args=args, model=model, model_without_ddp=model_without_ddp, optimizer=optimizer,
                 loss_scaler=loss_scaler, epoch=epoch)

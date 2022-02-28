@@ -1,0 +1,1 @@
+--batch_size 16 --model mae_vit_large_patch16 --norm_pix_loss --mask_ratio 0.75 --epochs 1000 --warmup_epochs 40 --blr 1.5e-4 --weight_decay 0.05 --data_path /media/ljc/ljc/imagestar --resume /home/ljc/Github/mae/output_dir/checkpoint-800.pth

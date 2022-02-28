@@ -19,6 +19,7 @@ from pathlib import Path
 
 import torch
 import torch.backends.cudnn as cudnn
+from PASS import RunningMode
 from torch.utils.tensorboard import SummaryWriter
 import torchvision.transforms as transforms
 import torchvision.datasets as datasets
@@ -109,6 +110,8 @@ def get_args_parser():
     parser.add_argument('--dist_on_itp', action='store_true')
     parser.add_argument('--dist_url', default='env://',
                         help='url used to set up distributed training')
+    parser.add_argument('--mode', type=str, default='Pretrain',
+                                 help='Mask Gate mode')
 
     return parser
 
@@ -126,6 +129,16 @@ def main(args):
     torch.manual_seed(seed)
     np.random.seed(seed)
 
+    if args.mode == 'Pretrain':
+        args.running_mode = RunningMode.GatePreTrain
+    if args.mode == 'Finetuning':
+        args.running_mode = RunningMode.FineTuning
+    if args.mode == 'Test':
+        args.running_mode = RunningMode.Test
+    if args.mode == 'Origin':
+        args.running_mode = RunningMode.BackboneTrain
+    if args.mode == 'BackboneTest':
+        args.running_mode = RunningMode.BackboneTest
     cudnn.benchmark = True
 
     # linear probe: weak augmentation
