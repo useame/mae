@@ -8,7 +8,7 @@ import numpy as np
 
 import matplotlib.pyplot as plt
 from PIL import Image
-import models_mae
+import models_mae_before as models_mae
 from pathlib import Path
 
 imagenet_mean = np.array([0.485, 0.456, 0.406])
