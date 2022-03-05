@@ -319,14 +319,47 @@ def load_model(args, model_without_ddp, optimizer, loss_scaler):
                 args.resume, map_location='cpu', check_hash=True)
         else:
             checkpoint = torch.load(args.resume, map_location='cpu')
-        model_without_ddp.load_state_dict(checkpoint['model'])
-        print("Resume checkpoint %s" % args.resume)
-        if 'optimizer' in checkpoint and 'epoch' in checkpoint and not (hasattr(args, 'eval') and args.eval):
-            optimizer.load_state_dict(checkpoint['optimizer'])
-            args.start_epoch = checkpoint['epoch'] + 1
-            if 'scaler' in checkpoint:
-                loss_scaler.load_state_dict(checkpoint['scaler'])
-            print("With optim & sched!")
+        # model_without_ddp.load_state_dict(checkpoint['model'])
+        # print("Resume checkpoint %s" % args.resume)
+        # if 'optimizer' in checkpoint and 'epoch' in checkpoint and not (hasattr(args, 'eval') and args.eval):
+        #     # optimizer.load_state_dict(checkpoint['optimizer'])
+        #     args.start_epoch = checkpoint['epoch'] + 1
+        #     if 'scaler' in checkpoint:
+        #         loss_scaler.load_state_dict(checkpoint['scaler'])
+        #     print("With optim & sched!")
+
+        state_dict_ = checkpoint['model']
+        state_dict = {}
+
+        # convert data_parallal to model
+        for k in state_dict_:
+            if k.startswith('module') and not k.startswith('module_list'):
+                state_dict[k[7:]] = state_dict_[k]
+            else:
+                state_dict[k] = state_dict_[k]
+        model_state_dict = model_without_ddp.state_dict()
+
+        # check loaded parameters and created model parameters
+        msg = 'If you see this, your model does not fully load the ' + \
+              'pre-trained weight. Please make sure ' + \
+              'you have correctly specified --arch xxx ' + \
+              'or set the correct --num_classes for your own dataset.'
+        for k in state_dict:
+            if k in model_state_dict:
+                if state_dict[k].shape != model_state_dict[k].shape:
+                    print('Skip loading parameter {}, required shape{}, ' \
+                          'loaded shape{}. {}'.format(
+                        k, model_state_dict[k].shape, state_dict[k].shape, msg))
+                    state_dict[k] = model_state_dict[k]
+            else:
+                print('Drop parameter {}.'.format(k) + msg)
+        for k in model_state_dict:
+            if not (k in state_dict):
+                print('No param {}.'.format(k) + msg)
+                state_dict[k] = model_state_dict[k]
+        model_without_ddp.load_state_dict(state_dict, strict=False)
+
+
 
 
 def all_reduce_mean(x):
