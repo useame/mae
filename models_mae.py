@@ -24,7 +24,7 @@ class PatchEmbed_(PatchEmbed):
 # class PatchEmbed(nn.Module):
     """ Image to Patch Embedding
     """
-    def __init__(self, img_size=224, patch_size=16,  in_chans=3,  embed_dim=768,
+    def __init__(self, img_size=256, patch_size=16,  in_chans=3,  embed_dim=768,
                  running_mode=RunningMode.GatePreTrain):
         super().__init__()
         img_size = to_2tuple(img_size)
@@ -76,7 +76,7 @@ class PatchEmbed_(PatchEmbed):
 class MaskedAutoencoderViT(nn.Module):
     """ Masked Autoencoder with VisionTransformer backbone
     """
-    def __init__(self, img_size=224, patch_size=16, in_chans=3,
+    def __init__(self, img_size=256, patch_size=16, in_chans=3,
                  embed_dim=1024, depth=24, num_heads=16,
                  decoder_embed_dim=512, decoder_depth=8, decoder_num_heads=16,
                  mlp_ratio=4., norm_layer=nn.LayerNorm, norm_pix_loss=False, running_mode=RunningMode.GatePreTrain):
@@ -277,6 +277,7 @@ class MaskedAutoencoderViT(nn.Module):
         latent, mask, ids_restore = self.forward_encoder(imgs, mask_ratio)
         pred = self.forward_decoder(latent, ids_restore)  # [N, L, p*p*3]
         loss = self.forward_loss(imgs, pred, mask)
+        print("MASK")
         return loss, pred, mask
 
 

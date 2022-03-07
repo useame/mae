@@ -358,7 +358,8 @@ def load_model(args, model_without_ddp, optimizer, loss_scaler):
                 print('No param {}.'.format(k) + msg)
                 state_dict[k] = model_state_dict[k]
         model_without_ddp.load_state_dict(state_dict, strict=False)
-
+        args.start_epoch = checkpoint['epoch'] + 1
+        print(args.start_epoch)
 
 
 

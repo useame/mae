@@ -90,9 +90,9 @@ def get_args_parser():
 def main(args):
     img_url = args.img_dir
     img = Image.open(img_url)
-    img = img.resize((224, 224))
+    img = img.resize((256, 256))
     img = np.array(img) / 255.
-    assert img.shape == (224, 224, 3)
+    assert img.shape == (256, 256, 3)
     img = img - imagenet_mean
     img = img / imagenet_std
 
