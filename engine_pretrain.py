@@ -27,7 +27,7 @@ def train_one_epoch(model: torch.nn.Module,
     metric_logger = misc.MetricLogger(delimiter="  ")
     metric_logger.add_meter('lr', misc.SmoothedValue(window_size=1, fmt='{value:.6f}'))
     header = 'Epoch: [{}]'.format(epoch)
-    print_freq = 20
+    print_freq = 1
 
     accum_iter = args.accum_iter
 
@@ -43,9 +43,10 @@ def train_one_epoch(model: torch.nn.Module,
         if data_iter_step % accum_iter == 0:
             lr_sched.adjust_learning_rate(optimizer, data_iter_step / len(data_loader) + epoch, args)
 
-        # samples = samples.to(device, non_blocking=True)
-        samples = samples.to(device)
+        samples = samples.to(device, non_blocking=True)
 
+        if data_iter_step == 1052:
+            print("aaa")
         with torch.cuda.amp.autocast():
             loss = model(samples)
         # print(loss)

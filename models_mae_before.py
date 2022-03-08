@@ -230,8 +230,10 @@ class MaskedAutoencoderViT(nn.Module):
         cls_token = self.cls_token + self.pos_embed[:, :1, :]
         cls_tokens = cls_token.expand(x.shape[0], -1, -1)
         x = torch.cat((cls_tokens, x), dim=1)
-        if x.shape != torch.Size([4, 257, 768]):
-            print("EMMMMMMMMMMMMMMMMMMMMMMMMM")
+        # if x.shape != torch.Size([4, 257, 768]):
+
+        if x.shape != torch.Size([12, 257, 1024]):
+            print(x.shape,"EMMMMMMMMMMMMMMMMMMMMMMMMM")
         # apply Transformer blocks
         for blk in self.blocks:
             x = blk(x)
