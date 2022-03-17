@@ -31,8 +31,9 @@ import timm.optim.optim_factory as optim_factory
 import util.misc as misc
 from util.misc import NativeScalerWithGradNormCount as NativeScaler
 # from timm.models import to_2tuple
-import models_mae
-
+import models_mae_before as models_mae
+from data.Human36M.Human36M import Human36M
+from data.dataset import DatasetLoader
 from engine_pretrain import train_one_epoch
 
 
@@ -103,7 +104,7 @@ def get_args_parser():
                         help='url used to set up distributed training')
 
     parser.add_argument('--mode', type=str, default='Pretrain',
-                                 help='Mask Gate mode')
+                        help='Mask Gate mode')
     return parser
 
 
@@ -126,7 +127,6 @@ def main(args):
     if args.mode == 'BackboneTest':
         args.running_mode = RunningMode.BackboneTest
 
-
     # fix the seed for reproducibility
     seed = args.seed + misc.get_rank()
     torch.manual_seed(seed)
@@ -134,13 +134,18 @@ def main(args):
 
     cudnn.benchmark = True
 
-    # simple augmentation
-    transform_train = transforms.Compose([
-            transforms.RandomResizedCrop(args.input_size, scale=(0.2, 1.0), interpolation=3),  # 3 is bicubic
-            transforms.RandomHorizontalFlip(),
-            transforms.ToTensor(),
-            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])])
-    dataset_train = datasets.ImageFolder(os.path.join(args.data_path, 'train'), transform=transform_train)
+    # # simple augmentation
+    # transform_train = transforms.Compose([
+    #         transforms.RandomResizedCrop(args.input_size, scale=(0.2, 1.0), interpolation=3),  # 3 is bicubic
+    #         transforms.RandomHorizontalFlip(),
+    #         transforms.ToTensor(),
+    #         transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])])
+    # dataset_train = datasets.ImageFolder(os.path.join(args.data_path, 'train'), transform=transform_train)
+    ref_joints_name = None
+    dataset_train = DatasetLoader(Human36M("train", args.mode), ref_joints_name, True, transforms.Compose([ \
+        transforms.ToTensor(),
+        transforms.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225))] \
+        ))
     print(dataset_train)
 
     if True:  # args.distributed:
@@ -159,16 +164,27 @@ def main(args):
     else:
         log_writer = None
 
-    data_loader_train = torch.utils.data.DataLoader(
-        dataset_train, sampler=sampler_train,
-        batch_size=args.batch_size,
-        num_workers=args.num_workers,
-        pin_memory=args.pin_mem,
-        drop_last=True,
-    )
-    
+    if args.mode == RunningMode.FineTuning:
+        data_loader_train = torch.utils.data.DataLoader(
+            dataset_train, sampler=sampler_train,
+            batch_size=args.batch_size,
+            num_workers=args.num_workers,
+            pin_memory=args.pin_mem,
+            drop_last=True,
+            # shuffle=False
+        )
+    else:
+        data_loader_train = torch.utils.data.DataLoader(
+            dataset_train, sampler=sampler_train,
+            batch_size=args.batch_size,
+            num_workers=args.num_workers,
+            pin_memory=args.pin_mem,
+            drop_last=True,
+            # shuffle=True
+        )
     # define the model
-    model = models_mae.__dict__[args.model](norm_pix_loss=args.norm_pix_loss, running_mode=args.running_mode)
+    model = models_mae.__dict__[args.model](norm_pix_loss=args.norm_pix_loss, running_mode=args.running_mode,
+                                            batch_size=args.batch_size)
 
     model.to(device)
 
@@ -176,7 +192,7 @@ def main(args):
     print("Model = %s" % str(model_without_ddp))
 
     eff_batch_size = args.batch_size * args.accum_iter * misc.get_world_size()
-    
+
     if args.lr is None:  # only base_lr is specified
         args.lr = args.blr * eff_batch_size / 256
 
@@ -189,7 +205,7 @@ def main(args):
     if args.distributed:
         model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.gpu], find_unused_parameters=True)
         model_without_ddp = model.module
-    
+
     # following timm: set wd as 0 for bias and norm layers
     param_groups = optim_factory.add_weight_decay(model_without_ddp, args.weight_decay)
     optimizer = torch.optim.AdamW(param_groups, lr=args.lr, betas=(0.9, 0.95))
@@ -215,7 +231,7 @@ def main(args):
                 loss_scaler=loss_scaler, epoch=epoch)
 
         log_stats = {**{f'train_{k}': v for k, v in train_stats.items()},
-                        'epoch': epoch,}
+                     'epoch': epoch, }
 
         if args.output_dir and misc.is_main_process():
             if log_writer is not None:
